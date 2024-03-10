@@ -21,11 +21,8 @@ const endY = 1;
 
 const audioContext = new (window.AudioContext || window.webkitAudioContext)();
 const analyser = audioContext.createAnalyser();
-
-
+const source
 analyser.fftSize = 1024; // You can adjust this value
-const bufferLength = analyser.frequencyBinCount;
-const dataArray = new Uint8Array(bufferLength);
 
 document.getElementById('playButton').addEventListener('click', function() {
   if (audioContext.state === 'suspended') {
@@ -115,7 +112,54 @@ function update() {
     requestAnimationFrame(update);
 }
 
-update();
+async function generateColorStops(analyser) {
+  return new Promise((resolve) => {
+      const bufferLength = analyser.frequencyBinCount;
+      const dataArray = new Uint8Array(bufferLength);
+      analyser.getByteFrequencyData(dataArray);
+
+      const colorStops = [];
+
+
+      for (let i = 0; i < bufferLength; i++) {
+        var position = 1/bufferLength * i;
+        const lightness = dataArray[i];
+        const hue = i / bufferLength * 360;
+        const color = `hsl(${hue}, 50%, ${lightness}%)`;
+        colorStops.push([position, color]);
+      }
+
+      resolve(colorStops);
+  });
+}
+
+async function drawRectangleWithGradient(ctx, analyser) {
+  const colorStops = await generateColorStops(analyser);
+
+  // Create gradient
+  const gradient = ctx.createLinearGradient(0, startY * canvas.height, 0, endY * canvas.height);
+  colorStops.forEach(stop => {
+      gradient.addColorStop(stop[0], stop[1]);
+  });
+  ctx.fillStyle = gradient;
+  // ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+  // colorStops.forEach(stop => gradient.addColorStop(stop.position, stop.color));
+  var rectangle = new Rectangle(canvas.width - 5, 0, 5, canvas.height, gradient);
+  rectangles.push(rectangle);
+}
+
+async function main() {
+  source.connect(analyser);
+  analyser.connect(audioContext.destination);
+
+  await drawRectangleWithGradient(ctx, analyser);
+}
+
+main();
+
+
+
+// update();
 
 
 // function update() {

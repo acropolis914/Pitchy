@@ -5,13 +5,19 @@
 </head>
 <body>
     <h1>Pitchy</h1>
-    <p>Record your voice and see the pitch of your voice in real time.</p>
-    <button id="playButton">ClickHere</button>
+    <label for="audioSource">Audio input source: </label>
+    <select id="audioSource"></select>
+    <button id="playButton">Click Here</button>
     <!-- <input type="file" id="fileInput" accept="audio/*"> -->
     <!-- <canvas id="micVisualizer" width="200" height="200"></canvas>
     <canvas id="spectrogram" width="600" height="200"></canvas> -->
-    <canvas id="myCanvas" width="800" height="512"></canvas>
-
+    <div class="canvas-container">
+        <canvas id="myCanvas" width="800" height="500"></canvas>
+        <canvas id="overlayCanvas" width="800" height="500"></canvas>
+    </div>
+    <div id="foot">
+        <p>Developed by <a href="">Paul Harvey</a> <br>2024</p>
+        </div>
 <script>
  
 </script>
@@ -20,3 +26,6 @@
 
 <script src="script.js" type="module"></script>
 <script src="micVisualizer.js" type="module"></script>
+<script src="overlaycanvas.js" type="module"></script>
+<script src="./js-colormaps.js" type="module"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>

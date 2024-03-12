@@ -1,14 +1,17 @@
+import "./js-colormaps.js";
+import { evaluate_cmap } from "./js-colormaps.js";
+import 'https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js'
+
 const canvas = document.getElementById("myCanvas");
 var ctx = canvas.getContext("2d");
-let colorIndex = 0;
-const colorDictionary = {};
-var x = canvas.width - 5; // Rightmost position of the rectangle
-var y = 0; // Top of the canvas
-var width = 10; // Width of the rectangle
-var height = canvas.height; // Height of the rectangle, same as canvas height
 
-const FRAMES_PER_SECOND = 20; // Desired frame rate
-const FRAME_MIN_TIME = (1000 / 60) * (60 / FRAMES_PER_SECOND) - (1000 / 60) * 0.5;
+const audioInputSelect = document.querySelector('select#audioSource');
+const selectors = [audioInputSelect];
+
+var x = canvas.width - 4; // Rightmost position of the rectangle
+var y = 0; // Top of the canvas
+var width = 4; // Width of the rectangle
+var height = canvas.height; // Height of the rectangle, same as canvas height
 
 let lastTimestamp = performance.now();
 let deltaTime = 0;
@@ -21,21 +24,10 @@ const endY = 1;
 
 const audioContext = new (window.AudioContext || window.webkitAudioContext)();
 const analyser = audioContext.createAnalyser();
-analyser.fftSize = 1024; // You can adjust this value
+analyser.fftSize = 4096; // You can adjust this value
+analyser.smoothingTimeConstant = 0.95; //this smooths the frequency data by averaging the data out over time
 const bufferLength = analyser.frequencyBinCount;
 const dataArray = new Uint8Array(bufferLength);
-
-
-document.getElementById('playButton').addEventListener('click', function() {
-  if (audioContext.state === 'suspended') {
-      audioContext.resume();
-  } 
-  const audio = new Audio('./audio.mp3');
-  const source = audioContext.createMediaElementSource(audio);
-  source.connect(analyser);
-  analyser.connect(audioContext.destination);
-  audio.play();
-});
 
 function Rectangle(x, y, width, height, gradient) {
   this.x = x;
@@ -45,7 +37,95 @@ function Rectangle(x, y, width, height, gradient) {
   this.gradient = gradient;
 }
 
-function freq(index) {
+
+// Define a global variable for the audio element
+let audio = null;
+
+// Function to handle play/pause
+function toggleAudio() {
+ if (!audio) {
+    // If the audio element is not yet created, create it and start playing
+    audio = new Audio('./audio.mp3');
+    const source = audioContext.createMediaElementSource(audio);
+    source.connect(analyser);
+    analyser.connect(audioContext.destination);
+    audio.play();
+ } else {
+    // If the audio element exists, toggle between play and pause
+    if (audio.paused) {
+      audio.play();
+    } else {
+      audio.pause();
+    }
+ }
+}
+
+// Modify the button's click event to call the toggleAudio function
+document.getElementById('playButton').addEventListener('click', function() {
+ if (window.stream) {
+    stream.getAudioTracks()[0].stop();
+ }
+ if (audioContext.state === 'suspended') {
+    audioContext.resume();
+ }
+ toggleAudio();
+});
+
+
+
+function gotDevices(deviceInfos) {
+  // Handles being called several times to update labels. Preserve values.
+  const values = selectors.map(select => select.value);
+  selectors.forEach(select => {
+    while (select.firstChild) {
+      select.removeChild(select.firstChild);
+    }
+  });
+  for (let i = 0; i !== deviceInfos.length; ++i) {
+    const deviceInfo = deviceInfos[i];
+    const option = document.createElement('option');
+    option.value = deviceInfo.deviceId;
+    if (deviceInfo.kind === 'audioinput') {
+      option.text = deviceInfo.label || `microphone ${audioInputSelect.length + 1}`;
+      audioInputSelect.appendChild(option);
+    }
+  }
+  selectors.forEach((select, selectorIndex) => {
+    if (Array.prototype.slice.call(select.childNodes).some(n => n.value === values[selectorIndex])) {
+      select.value = values[selectorIndex];
+    }
+  });
+}
+
+function handleError(error) {
+  console.log('navigator.MediaDevices.getUserMedia error: ', error.message, error.name);
+}
+
+function gotStream(stream) {
+  window.stream = stream;
+  const source = audioContext.createMediaStreamSource(stream)
+  source.connect(analyser);
+  analyser.connect(audioContext.destination)}
+
+function start() {
+	// Second call to getUserMedia() with changed device may cause error, so we need to release stream before changing device
+  if (window.stream) {
+  	stream.getAudioTracks()[0].stop();
+  }
+  if (audio) {toggleAudio()}
+
+  const audioSource = audioInputSelect.value;
+  
+  const constraints = {
+    audio: {deviceId: audioSource ? {exact: audioSource} : undefined}
+  };
+  
+  navigator.mediaDevices.getUserMedia(constraints).then(gotStream).catch(handleError);
+}
+
+audioInputSelect.onchange = start;
+
+function bin2freq(index) {
   // The sample rate is typically 44100 Hz for audio contexts
   const sampleRate = audioContext.sampleRate;
  
@@ -56,10 +136,9 @@ function freq(index) {
   return frequency;
  }
 
- function buffer(frequency) {
+ function freq2bin(frequency) {
   // The sample rate is typically 44100 Hz for audio contexts
   const sampleRate = audioContext.sampleRate;
-  console.log(sampleRate)
   const index = frequency / (sampleRate / 2) * analyser.fftSize;  
   return index;
  }
@@ -121,21 +200,23 @@ async function generateColorStops(analyser) {
   return new Promise((resolve) => {
 
       const colorStops = []; 
-      for (let i = 0; i < bufferLength; i++) {
+      for (let i = 42; i < 94; i++) {
         let position;
         if (i === 0) {
            position = 0;
-        } else if (i === bufferLength) {
+        } else if (i === 100) {
            position = 1;
         } else {
-           position = i / (bufferLength - 1);
+           position = i / (100 - 1);
         }
-        const lightness = dataArray[i]/255 * 100;
-        const hue = i / bufferLength * 360;
-        const color = `hsl(${hue}, 80%, ${lightness}%)`;
+        var lightness = dataArray[i]/255 * 100;
+        // const colormap = evaluate_cmap(position,'tab20c', false)
+        const hue = i / 100 * 100 + 100;
+        var alpha = 100;
+        // const color = `rgba(${colormap[0]}, ${colormap[1]}, ${colormap[2]}, ${alpha}%)`
+        const color = `hsla(${hue}, 75%, ${lightness}%, ${alpha}%)`;
         colorStops.push([position, color]);
       }
-  
       resolve(colorStops);   
   });
 }
@@ -143,19 +224,23 @@ async function generateColorStops(analyser) {
 var rectangles = []; // Array to store rectangle objects
 async function drawRectangleWithGradient(ctx, analyser) {
   const colorStops = await generateColorStops(analyser);
-  // const colorStops = [[0,"hsl(0, 50%, 0%)"],[0.00392156862745098,"hsl(1.40625, 50%, 0%)"],[0.00784313725490196,"hsl(2.8125, 50%, 0%)"],[0.011764705882352941,"hsl(4.21875, 50%, 0%)"],[0.01568627450980392,"hsl(5.625, 50%, 0%)"],[0.0196078431372549,"hsl(7.03125, 50%, 0%)"],[0.023529411764705882,"hsl(8.4375, 50%, 0%)"],[0.027450980392156862,"hsl(9.84375, 50%, 0%)"],[0.03137254901960784,"hsl(11.25, 50%, 0%)"],[0.03529411764705882,"hsl(12.65625, 50%, 0%)"],[0.0392156862745098,"hsl(14.0625, 50%, 0%)"],[0.043137254901960784,"hsl(15.46875, 50%, 0%)"],[0.047058823529411764,"hsl(16.875, 50%, 0%)"],[0.050980392156862744,"hsl(18.28125, 50%, 0%)"],[0.054901960784313725,"hsl(19.6875, 50%, 0%)"],[0.058823529411764705,"hsl(21.09375, 50%, 0%)"],[0.06274509803921569,"hsl(22.5, 50%, 0%)"],[0.06666666666666667,"hsl(23.90625, 50%, 0%)"],[0.07058823529411765,"hsl(25.3125, 50%, 0%)"],[0.07450980392156863,"hsl(26.71875, 50%, 0%)"],[0.0784313725490196,"hsl(28.125, 50%, 0%)"],[0.08235294117647059,"hsl(29.53125, 50%, 0%)"],[0.08627450980392157,"hsl(30.9375, 50%, 0%)"],[0.09019607843137255,"hsl(32.34375, 50%, 0%)"],[0.09411764705882353,"hsl(33.75, 50%, 0%)"],[0.09803921568627451,"hsl(35.15625, 50%, 0%)"],[0.10196078431372549,"hsl(36.5625, 50%, 0%)"],[0.10588235294117647,"hsl(37.96875, 50%, 0%)"],[0.10980392156862745,"hsl(39.375, 50%, 0%)"],[0.11372549019607843,"hsl(40.78125, 50%, 0%)"],[0.11764705882352941,"hsl(42.1875, 50%, 0%)"],[0.12156862745098039,"hsl(43.59375, 50%, 0%)"],[0.12549019607843137,"hsl(45, 50%, 0%)"],[0.12941176470588237,"hsl(46.40625, 50%, 0%)"],[0.13333333333333333,"hsl(47.8125, 50%, 0%)"],[0.13725490196078433,"hsl(49.21875, 50%, 0%)"],[0.1411764705882353,"hsl(50.625, 50%, 0%)"],[0.1450980392156863,"hsl(52.03125, 50%, 0%)"],[0.14901960784313725,"hsl(53.4375, 50%, 0%)"],[0.15294117647058825,"hsl(54.84375, 50%, 0%)"],[0.1568627450980392,"hsl(56.25, 50%, 0%)"],[0.1607843137254902,"hsl(57.65625, 50%, 0%)"],[0.16470588235294117,"hsl(59.0625, 50%, 0%)"],[0.16862745098039217,"hsl(60.46875, 50%, 0%)"],[0.17254901960784313,"hsl(61.875, 50%, 0%)"],[0.17647058823529413,"hsl(63.28125, 50%, 0%)"],[0.1803921568627451,"hsl(64.6875, 50%, 0%)"],[0.1843137254901961,"hsl(66.09375, 50%, 0%)"],[0.18823529411764706,"hsl(67.5, 50%, 0%)"],[0.19215686274509805,"hsl(68.90625, 50%, 0%)"],[0.19607843137254902,"hsl(70.3125, 50%, 0%)"],[0.2,"hsl(71.71875, 50%, 0%)"],[0.20392156862745098,"hsl(73.125, 50%, 0%)"],[0.20784313725490197,"hsl(74.53125, 50%, 0%)"],[0.21176470588235294,"hsl(75.9375, 50%, 0%)"],[0.21568627450980393,"hsl(77.34375, 50%, 0%)"],[0.2196078431372549,"hsl(78.75, 50%, 0%)"],[0.2235294117647059,"hsl(80.15625, 50%, 0%)"],[0.22745098039215686,"hsl(81.5625, 50%, 0%)"],[0.23137254901960785,"hsl(82.96875, 50%, 0%)"],[0.23529411764705882,"hsl(84.375, 50%, 0%)"],[0.23921568627450981,"hsl(85.78125, 50%, 0%)"],[0.24313725490196078,"hsl(87.1875, 50%, 0%)"],[0.24705882352941178,"hsl(88.59375, 50%, 0%)"],[0.25098039215686274,"hsl(90, 50%, 0%)"],[0.2549019607843137,"hsl(91.40625, 50%, 0%)"],[0.25882352941176473,"hsl(92.8125, 50%, 0%)"],[0.2627450980392157,"hsl(94.21875, 50%, 0%)"],[0.26666666666666666,"hsl(95.625, 50%, 0%)"],[0.27058823529411763,"hsl(97.03125, 50%, 0%)"],[0.27450980392156865,"hsl(98.4375, 50%, 0%)"],[0.2784313725490196,"hsl(99.84375, 50%, 0%)"],[0.2823529411764706,"hsl(101.25, 50%, 0%)"],[0.28627450980392155,"hsl(102.65625, 50%, 0%)"],[0.2901960784313726,"hsl(104.0625, 50%, 0%)"],[0.29411764705882354,"hsl(105.46875, 50%, 0%)"],[0.2980392156862745,"hsl(106.875, 50%, 0%)"],[0.30196078431372547,"hsl(108.28125, 50%, 0%)"],[0.3058823529411765,"hsl(109.6875, 50%, 0%)"],[0.30980392156862746,"hsl(111.09375, 50%, 0%)"],[0.3137254901960784,"hsl(112.5, 50%, 0%)"],[0.3176470588235294,"hsl(113.90625, 50%, 0%)"],[0.3215686274509804,"hsl(115.3125, 50%, 0%)"],[0.3254901960784314,"hsl(116.71875, 50%, 0%)"],[0.32941176470588235,"hsl(118.125, 50%, 0%)"],[0.3333333333333333,"hsl(119.53125, 50%, 0%)"],[0.33725490196078434,"hsl(120.9375, 50%, 0%)"],[0.3411764705882353,"hsl(122.34375, 50%, 0%)"],[0.34509803921568627,"hsl(123.75, 50%, 0%)"],[0.34901960784313724,"hsl(125.15625, 50%, 0%)"],[0.35294117647058826,"hsl(126.5625, 50%, 0%)"],[0.3568627450980392,"hsl(127.96875, 50%, 0%)"],[0.3607843137254902,"hsl(129.375, 50%, 0%)"],[0.36470588235294116,"hsl(130.78125, 50%, 0%)"],[0.3686274509803922,"hsl(132.1875, 50%, 0%)"],[0.37254901960784315,"hsl(133.59375, 50%, 0%)"],[0.3764705882352941,"hsl(135, 50%, 0%)"],[0.3803921568627451,"hsl(136.40625, 50%, 0%)"],[0.3843137254901961,"hsl(137.8125, 50%, 0%)"],[0.38823529411764707,"hsl(139.21875, 50%, 0%)"],[0.39215686274509803,"hsl(140.625, 50%, 0%)"],[0.396078431372549,"hsl(142.03125, 50%, 0%)"],[0.4,"hsl(143.4375, 50%, 0%)"],[0.403921568627451,"hsl(144.84375, 50%, 0%)"],[0.40784313725490196,"hsl(146.25, 50%, 0%)"],[0.4117647058823529,"hsl(147.65625, 50%, 0%)"],[0.41568627450980394,"hsl(149.0625, 50%, 0%)"],[0.4196078431372549,"hsl(150.46875, 50%, 0%)"],[0.4235294117647059,"hsl(151.875, 50%, 0%)"],[0.42745098039215684,"hsl(153.28125, 50%, 0%)"],[0.43137254901960786,"hsl(154.6875, 50%, 0%)"],[0.43529411764705883,"hsl(156.09375, 50%, 0%)"],[0.4392156862745098,"hsl(157.5, 50%, 0%)"],[0.44313725490196076,"hsl(158.90625, 50%, 0%)"],[0.4470588235294118,"hsl(160.3125, 50%, 0%)"],[0.45098039215686275,"hsl(161.71875, 50%, 0%)"],[0.4549019607843137,"hsl(163.125, 50%, 0%)"],[0.4588235294117647,"hsl(164.53125, 50%, 0%)"],[0.4627450980392157,"hsl(165.9375, 50%, 0%)"],[0.4666666666666667,"hsl(167.34375, 50%, 0%)"],[0.47058823529411764,"hsl(168.75, 50%, 0%)"],[0.4745098039215686,"hsl(170.15625, 50%, 0%)"],[0.47843137254901963,"hsl(171.5625, 50%, 0%)"],[0.4823529411764706,"hsl(172.96875, 50%, 0%)"],[0.48627450980392156,"hsl(174.375, 50%, 0%)"],[0.49019607843137253,"hsl(175.78125, 50%, 0%)"],[0.49411764705882355,"hsl(177.1875, 50%, 0%)"],[0.4980392156862745,"hsl(178.59375, 50%, 0%)"],[0.5019607843137255,"hsl(180, 50%, 0%)"],[0.5058823529411764,"hsl(181.40625, 50%, 0%)"],[0.5098039215686274,"hsl(182.8125, 50%, 0%)"],[0.5137254901960784,"hsl(184.21875, 50%, 0%)"],[0.5176470588235295,"hsl(185.625, 50%, 0%)"],[0.5215686274509804,"hsl(187.03125, 50%, 0%)"],[0.5254901960784314,"hsl(188.4375, 50%, 0%)"],[0.5294117647058824,"hsl(189.84375, 50%, 0%)"],[0.5333333333333333,"hsl(191.25, 50%, 0%)"],[0.5372549019607843,"hsl(192.65625, 50%, 0%)"],[0.5411764705882353,"hsl(194.0625, 50%, 0%)"],[0.5450980392156862,"hsl(195.46875, 50%, 0%)"],[0.5490196078431373,"hsl(196.875, 50%, 0%)"],[0.5529411764705883,"hsl(198.28125, 50%, 0%)"],[0.5568627450980392,"hsl(199.6875, 50%, 0%)"],[0.5607843137254902,"hsl(201.09375, 50%, 0%)"],[0.5647058823529412,"hsl(202.5, 50%, 0%)"],[0.5686274509803921,"hsl(203.90625, 50%, 0%)"],[0.5725490196078431,"hsl(205.3125, 50%, 0%)"],[0.5764705882352941,"hsl(206.71875, 50%, 0%)"],[0.5803921568627451,"hsl(208.125, 50%, 0%)"],[0.5843137254901961,"hsl(209.53125, 50%, 0%)"],[0.5882352941176471,"hsl(210.9375, 50%, 0%)"],[0.592156862745098,"hsl(212.34375, 50%, 0%)"],[0.596078431372549,"hsl(213.75, 50%, 0%)"],[0.6,"hsl(215.15625, 50%, 0%)"],[0.6039215686274509,"hsl(216.5625, 50%, 0%)"],[0.6078431372549019,"hsl(217.96875, 50%, 0%)"],[0.611764705882353,"hsl(219.375, 50%, 0%)"],[0.615686274509804,"hsl(220.78125, 50%, 0%)"],[0.6196078431372549,"hsl(222.1875, 50%, 0%)"],[0.6235294117647059,"hsl(223.59375, 50%, 0%)"],[0.6274509803921569,"hsl(225, 50%, 0%)"],[0.6313725490196078,"hsl(226.40625, 50%, 0%)"],[0.6352941176470588,"hsl(227.8125, 50%, 0%)"],[0.6392156862745098,"hsl(229.21875, 50%, 0%)"],[0.6431372549019608,"hsl(230.625, 50%, 0%)"],[0.6470588235294118,"hsl(232.03125, 50%, 0%)"],[0.6509803921568628,"hsl(233.4375, 50%, 0%)"],[0.6549019607843137,"hsl(234.84375, 50%, 0%)"],[0.6588235294117647,"hsl(236.25, 50%, 0%)"],[0.6627450980392157,"hsl(237.65625, 50%, 0%)"],[0.6666666666666666,"hsl(239.0625, 50%, 0%)"],[0.6705882352941176,"hsl(240.46875, 50%, 0%)"],[0.6745098039215687,"hsl(241.875, 50%, 0%)"],[0.6784313725490196,"hsl(243.28125, 50%, 0%)"],[0.6823529411764706,"hsl(244.6875, 50%, 0%)"],[0.6862745098039216,"hsl(246.09375, 50%, 0%)"],[0.6901960784313725,"hsl(247.5, 50%, 0%)"],[0.6941176470588235,"hsl(248.90625, 50%, 0%)"],[0.6980392156862745,"hsl(250.3125, 50%, 0%)"],[0.7019607843137254,"hsl(251.71875, 50%, 0%)"],[0.7058823529411765,"hsl(253.125, 50%, 0%)"],[0.7098039215686275,"hsl(254.53125, 50%, 0%)"],[0.7137254901960784,"hsl(255.9375, 50%, 0%)"],[0.7176470588235294,"hsl(257.34375, 50%, 0%)"],[0.7215686274509804,"hsl(258.75, 50%, 0%)"],[0.7254901960784313,"hsl(260.15625, 50%, 0%)"],[0.7294117647058823,"hsl(261.5625, 50%, 0%)"],[0.7333333333333333,"hsl(262.96875, 50%, 0%)"],[0.7372549019607844,"hsl(264.375, 50%, 0%)"],[0.7411764705882353,"hsl(265.78125, 50%, 0%)"],[0.7450980392156863,"hsl(267.1875, 50%, 0%)"],[0.7490196078431373,"hsl(268.59375, 50%, 0%)"],[0.7529411764705882,"hsl(270, 50%, 0%)"],[0.7568627450980392,"hsl(271.40625, 50%, 0%)"],[0.7607843137254902,"hsl(272.8125, 50%, 0%)"],[0.7647058823529411,"hsl(274.21875, 50%, 0%)"],[0.7686274509803922,"hsl(275.625, 50%, 0%)"],[0.7725490196078432,"hsl(277.03125, 50%, 0%)"],[0.7764705882352941,"hsl(278.4375, 50%, 0%)"],[0.7803921568627451,"hsl(279.84375, 50%, 0%)"],[0.7843137254901961,"hsl(281.25, 50%, 0%)"],[0.788235294117647,"hsl(282.65625, 50%, 0%)"],[0.792156862745098,"hsl(284.0625, 50%, 0%)"],[0.796078431372549,"hsl(285.46875, 50%, 0%)"],[0.8,"hsl(286.875, 50%, 0%)"],[0.803921568627451,"hsl(288.28125, 50%, 0%)"],[0.807843137254902,"hsl(289.6875, 50%, 0%)"],[0.8117647058823529,"hsl(291.09375, 50%, 0%)"],[0.8156862745098039,"hsl(292.5, 50%, 0%)"],[0.8196078431372549,"hsl(293.90625, 50%, 0%)"],[0.8235294117647058,"hsl(295.3125, 50%, 0%)"],[0.8274509803921568,"hsl(296.71875, 50%, 0%)"],[0.8313725490196079,"hsl(298.125, 50%, 0%)"],[0.8352941176470589,"hsl(299.53125, 50%, 0%)"],[0.8392156862745098,"hsl(300.9375, 50%, 0%)"],[0.8431372549019608,"hsl(302.34375, 50%, 0%)"],[0.8470588235294118,"hsl(303.75, 50%, 0%)"],[0.8509803921568627,"hsl(305.15625, 50%, 0%)"],[0.8549019607843137,"hsl(306.5625, 50%, 0%)"],[0.8588235294117647,"hsl(307.96875, 50%, 0%)"],[0.8627450980392157,"hsl(309.375, 50%, 0%)"],[0.8666666666666667,"hsl(310.78125, 50%, 0%)"],[0.8705882352941177,"hsl(312.1875, 50%, 0%)"],[0.8745098039215686,"hsl(313.59375, 50%, 0%)"],[0.8784313725490196,"hsl(315, 50%, 0%)"],[0.8823529411764706,"hsl(316.40625, 50%, 0%)"],[0.8862745098039215,"hsl(317.8125, 50%, 0%)"],[0.8901960784313725,"hsl(319.21875, 50%, 0%)"],[0.8941176470588236,"hsl(320.625, 50%, 0%)"],[0.8980392156862745,"hsl(322.03125, 50%, 0%)"],[0.9019607843137255,"hsl(323.4375, 50%, 0%)"],[0.9058823529411765,"hsl(324.84375, 50%, 0%)"],[0.9098039215686274,"hsl(326.25, 50%, 0%)"],[0.9137254901960784,"hsl(327.65625, 50%, 0%)"],[0.9176470588235294,"hsl(329.0625, 50%, 0%)"],[0.9215686274509803,"hsl(330.46875, 50%, 0%)"],[0.9254901960784314,"hsl(331.875, 50%, 0%)"],[0.9294117647058824,"hsl(333.28125, 50%, 0%)"],[0.9333333333333333,"hsl(334.6875, 50%, 0%)"],[0.9372549019607843,"hsl(336.09375, 50%, 0%)"],[0.9411764705882353,"hsl(337.5, 50%, 0%)"],[0.9450980392156862,"hsl(338.90625, 50%, 0%)"],[0.9490196078431372,"hsl(340.3125, 50%, 0%)"],[0.9529411764705882,"hsl(341.71875, 50%, 0%)"],[0.9568627450980393,"hsl(343.125, 50%, 0%)"],[0.9607843137254902,"hsl(344.53125, 50%, 0%)"],[0.9647058823529412,"hsl(345.9375, 50%, 0%)"],[0.9686274509803922,"hsl(347.34375, 50%, 0%)"],[0.9725490196078431,"hsl(348.75, 50%, 0%)"],[0.9764705882352941,"hsl(350.15625, 50%, 0%)"],[0.9803921568627451,"hsl(351.5625, 50%, 0%)"],[0.984313725490196,"hsl(352.96875, 50%, 0%)"],[0.9882352941176471,"hsl(354.375, 50%, 0%)"],[0.9921568627450981,"hsl(355.78125, 50%, 0%)"],[0.996078431372549,"hsl(357.1875, 50%, 0%)"],[1,"hsl(358.59375, 50%, 0%)"]]
-  const gradient = ctx.createLinearGradient( canvas.width -5, endY * canvas.height, canvas.width -5, startY * canvas.height);
+const gradient = ctx.createLinearGradient( canvas.width -5, endY * canvas.height, canvas.width -5, startY * canvas.height);
   await colorStops.forEach(stop => {
     gradient.addColorStop(stop[0], stop[1]);
    });
 
-  var rectangle = new Rectangle(canvas.width, 0, 10, canvas.height, gradient);
+  var rectangle = new Rectangle(canvas.width, 0, width, canvas.height, gradient);
   rectangles.push(rectangle);
 }
+
+
+
+
 
 async function main() {
   deltaTime = (performance.now() - lastTimestamp) / 1000; // Calculate delta time in seconds
   lastTimestamp = performance.now();
+
   analyser.getByteFrequencyData(dataArray);
 
   await drawRectangleWithGradient(ctx, analyser);
@@ -164,17 +249,20 @@ async function main() {
 
   for (var i = 0; i < rectangles.length; i++) {
     var rectangle = rectangles[i];
-    rectangle.x -= scrollSpeed * deltaTime + width -1; // Move the rectangle 10 pixels to the left
+    rectangle.x -= scrollSpeed * deltaTime + 2; // Move the rectangle 10 pixels to the left
     drawRectangle(rectangle);
   }
-  if (rectangles.length > 90) {
-    rectangles.splice(0, rectangles.length - 90);
+  if (rectangles.length > 400) {
+    rectangles.splice(0, rectangles.length - 400);
   }
-  setTimeout(() => {requestAnimationFrame(main)}, 20);
+  setTimeout(() => {requestAnimationFrame(main)}, 10);
   // requestAnimationFrame(main);
   
 }
 
+navigator.mediaDevices.enumerateDevices()
+.then(gotDevices);
 main();
-console.log(freq(18.77333333))
-console.log(buffer(440))
+
+console.log(freq2bin(Tone.Frequency("B3").toFrequency()))
+console.log(freq2bin(Tone.Frequency("C#5").toFrequency()))

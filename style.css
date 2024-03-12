@@ -1,34 +1,71 @@
-
 * {
     font-family: 'Courier New', Courier, monospace;
     background-color: rgb(10, 10, 10);
-    color-scheme:dark ;
-    justify-content: center;
-    
-}
-body {
-    padding: 5%;
-}
-button{
+    color-scheme: dark;
+  }
+  
+  body {
+    padding: 0%;
+    width: 100%;
+    margin-top: 0;
+    margin-left: 10%;
+  }
+  
+  button,
+  #footer {
+    color: white;
+    font-size: 16px; /* Applied to both button and footer */
+  }
+  
+  button {
     background-color: #4b80a3;
     border: none;
-    color: white;
-    padding: 15px 32px;
-    text-align: center;
+    padding: 5px;
     text-decoration: none;
     display: inline-block;
-    font-size: 16px;
-    margin: 4px 2px;
     cursor: pointer;
-    border-radius: 20px
-}
-
-canvas {
-    border: 1px solid white;
+    border-radius: 20px;
+  }
+  
+  .canvas-container {
+    position: relative;
     display: block;
-    margin: 0 auto;
+    width: 800px;
+    height: 512px;
+    margin: auto 0;
+  }
+  
+  canvas { /* Merged styles for both canvas elements */
+    position: absolute;
+    top: 0;
+    left: 0;
+    border: 1px solid white;
     margin-top: 20px;
     border-radius: 10px;
-    background-color: rgb(41, 41, 41);
-}
-
+  }
+  
+  #myCanvas {
+    background-color: rgb(0, 0, 0);
+  }
+  
+  #overlayCanvas {
+    background-color: rgba(236, 236, 236, 0);
+    color: rgba(194, 194, 194, 0.603);
+    z-index: 1;
+  }
+  
+  #footer {
+    position: fixed;
+    bottom: 0;
+    width: 100%;
+    text-align: center; /* Re-added for centered footer */
+    height:px;
+    z-index: 2;
+    background-color: #4b80a3;
+    font-size: 12px;
+  }
+  
+  a {
+    color: rgb(210, 242, 243);
+    text-decoration: none;
+  }
